@@ -45,6 +45,9 @@ static unsigned int CreateShader(const std::string& vertexShader, const std::str
     return program;
 }
 
+const int width = 640 * 2;
+const int height = 480 * 2;
+
 int main(void)
 {
     GLFWwindow* window;
@@ -55,7 +58,7 @@ int main(void)
 
 
     /* Create a windowed mode window and its OpenGL context */
-    window = glfwCreateWindow(640, 480, "Hello World", NULL, NULL);
+    window = glfwCreateWindow(width, height, "Hello World", NULL, NULL);
     if (!window)
     {
         glfwTerminate(); 
@@ -74,42 +77,46 @@ int main(void)
 
     std::cout << glGetString(GL_VERSION) << std::endl;
 
-    float positions[6] =
+    const int dataPerVert = 4;
+    const int vertDataTotal = dataPerVert * 3;
+    float positions[vertDataTotal] =
     {
-        -0.5f, -0.5f,
-         0.0f,  0.5f,
-         0.5f, -0.5f
+        -1.0f,  1.0f, 0.0f, 0.0f,
+         3.0f,  1.0f, 2.0f, 0.0f,
+        -1.0f, -3.0f, 0.0f, 2.0f
     };
 
     // Initialize the buffer and bind it 
     unsigned int buffer;
     glGenBuffers(1, &buffer);
     glBindBuffer(GL_ARRAY_BUFFER, buffer);
-    glBufferData(GL_ARRAY_BUFFER, 6 * sizeof(float), positions, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, vertDataTotal * sizeof(float), positions, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), 0);
+    glVertexAttribPointer(0, dataPerVert, GL_FLOAT, GL_FALSE, dataPerVert * sizeof(float), 0);
     glEnableVertexAttribArray(0);
 
     std::string vertexShader =
         "#version 330 core\n"
         "\n"
         "layout (location = 0) in vec4 position;\n"
+        "out vec2 uv;\n"
         "\n"
 
         "void main()\n"
         "{\n"
-        "   gl_Position = position;\n"
+        "   gl_Position = vec4(position.xy, 0.0, 1.0);\n"
+        "   uv = position.zw;\n"
         "}\n";
 
     std::string fragmentShader =
         "#version 330 core\n"
         "\n"
         "layout (location = 0) out vec4 color;\n"
+        "in vec2 uv;\n"
         "\n"
-
         "void main()\n"
         "{\n"
-        "   color = vec4(1.0, 0.0, 0.0, 1.0);\n"
+        "   color = vec4(uv, 0.0, 1.0); \n"
         "}\n";
 
 
@@ -130,7 +137,9 @@ int main(void)
         /* Poll for and process events */
         glfwPollEvents();
     }
-     
+    
+    glDeleteProgram(shader);
+
     glfwTerminate();
     return 0;
 }
