@@ -140,7 +140,7 @@ int main(void)
     glVertexAttribPointer(0, dataPerVert, GL_FLOAT, GL_FALSE, dataPerVert * sizeof(float), 0);
     glEnableVertexAttribArray(0); 
 
-    ShaderProgramSource source = ParseShader("../res/shaders/Basic.shader");
+    ShaderProgramSource source = ParseShader("./res/shaders/Basic.shader");
     std::cout << "VERTEX" << std::endl;
     std::cout << source.VertexSource << std::endl;
     std::cout << "FRAGMENT" << std::endl;
