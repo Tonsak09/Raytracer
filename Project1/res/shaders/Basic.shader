@@ -17,7 +17,11 @@ void main()
 #shader fragment
 #version 330 core
        
-
+struct Hittable 
+{
+    int type;
+    int offset; 
+}
 
 struct Camera
 {
@@ -26,6 +30,116 @@ struct Camera
     vec3 right;
     vec3 up;
 };
+
+struct Triangle
+{
+    vec3 pos;
+    vec3 vertA;
+    vec3 vertB;
+    vec3 vertC;
+};
+
+struct HitData
+{
+    vec3 pos; 
+    vec3 n;
+    float t; 
+};
+
+struct Ray
+{
+    vec3 origin;
+    vec3 dir;
+};
+
+
+
+
+layout (location = 0) out vec4 color;
+in vec2 uv;
+        
+vec3 WorldToCamera(Camera cam, vec3 worldPos);
+vec3 RaySolve(Ray ray, float t);
+float HitSphere(vec3 center, float radius, Ray ray);
+float HitTriangle(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOffset, Ray ray);
+
+#define MAX_BOUNCE 3
+
+void main()
+{
+    vec2 uvN = 2.0 * uv - 1.0;
+    uvN = vec2(uvN.x, -uvN.y * 480.0f / 640.0f);
+
+
+    Camera cam; 
+    cam.pos =   vec3( 0, 0.3, -1);
+    cam.dir =   normalize(vec3( 0,  -0.1,  1));
+    cam.right = vec3( 1,  0,  0);
+    cam.up =    cross(cam.right, cam.dir);
+
+    Ray r;
+    r.origin = cam.pos;
+    r.dir = normalize(vec3(uvN.xy, 1.0f));
+
+    
+    vec3 spherePos = vec3(0, 0, 6);
+    vec3 sphereLocal = WorldToCamera(cam, spherePos);
+    float sphereRadius = 1.5;
+
+    Triangle triA;
+    triA.pos = vec3(0, 0, 0);
+    triA.vertA = vec3(-0.5, 0.0, -0.5);
+    triA.vertB = vec3(-0.5, 0.0,  0.5);
+    triA.vertC = vec3( 0.5, 0.0, -0.5);
+
+    Triangle triB;
+    triB.pos = vec3(0, 0, 0);
+    triB.vertA = vec3( 0.5, 0.0, -0.5);
+    triB.vertB = vec3( 0.5, 0.0,  0.5);
+    triB.vertC = vec3(-0.5, 0.0,  0.5);
+
+    vec3 col = vec3(1.0, 1.0, 1.0);
+
+
+
+    // Iterate through all of the scene hittables 
+    //for (int i = 0; i < )
+    
+
+
+    float t = -1.0f; 
+    
+    // Floor check 
+    t = max(
+            HitTriangle(WorldToCamera(cam, triA.pos), WorldToCamera(cam, triA.vertA), WorldToCamera(cam, triA.vertB), WorldToCamera(cam, triA.vertC), r),
+            HitTriangle(WorldToCamera(cam, triB.pos), WorldToCamera(cam, triB.vertA), WorldToCamera(cam, triB.vertB), WorldToCamera(cam, triB.vertC), r));
+
+    // We can assume that the triangle's normal is (0, 1, 0) but
+    // only this specific case 
+
+    if (t > 0.0f)
+    {
+        // Reflect ray 
+    }
+
+    // Sphere check 
+    t = max (t, HitSphere(sphereLocal, sphereRadius, r));
+
+
+    if(t > 0.0f) // RayIntersectTri(trianglePos, vertA, vertB, vertC, r)
+    {
+        vec3 n = normalize(RaySolve(r, t) - sphereLocal);
+        color = vec4(abs(n), 1.0);
+    }
+    else
+    {
+        color = vec4(1.0, 1.0, 1.0, 1.0); 
+    }
+
+};
+
+
+
 
 // Convert a global position to the camera's local space
 vec3 WorldToCamera(Camera cam, vec3 worldPos)
@@ -40,12 +154,6 @@ vec3 WorldToCamera(Camera cam, vec3 worldPos)
     //vec3 rel = worldPos - cam.pos;
     //return vec3(dot(worldPos, cam.right), dot(worldPos, cam.up), dot(worldPos, cam.dir));
 }
-
-struct Ray
-{
-    vec3 origin;
-    vec3 dir;
-};
 
 vec3 RaySolve(Ray ray, float t)
 {
@@ -72,7 +180,6 @@ float HitSphere(vec3 center, float radius, Ray ray)
         return (-b - sqrt(discriminant)) / (2.0 * a); // Fixed quadratic formula
     }
 }
-
 
 
 float HitTriangle(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOffset, Ray ray)
@@ -106,8 +213,6 @@ float HitTriangle(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOff
     float u = dot(tVec, pVec) * invDet;
     if(u < 0.0 || u > 1.0)
     {
-       // return 1.0;
-
         return 0.0;
     }
 
@@ -121,107 +226,4 @@ float HitTriangle(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOff
 
     t = dot(edgeB, qVec) * invDet;
     return 1.0; 
-
 }
-
-
-
-
-bool RayIntersectTri(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOffset, Ray ray)
-{
-    vec3 vertA = center + vertAOffset;
-    vec3 vertB = center + vertBOffset;
-    vec3 vertC = center + vertCOffset;
-
-    float EPSILON = 0.0000001;
-
-    vec3 edge1, edge2, h, s, q;
-    float a, f, u, v;
-    edge1 = vertB - vertA;
-    edge2 = vertC - vertA;
-
-    h = cross(ray.dir, edge2);
-    a = dot(edge1, h);
-    if (a > -EPSILON && a < EPSILON)
-        return true;
-        //return false;
-
-    f = 1.0 / a;
-    s = ray.origin - vertA;
-    u = f * dot(s, h);
-    if (u < 0.0 || u > 1.0)
-        return true;
-        //return false;
-
-    q = cross(s, edge1);
-    v = f * dot(ray.dir, q);
-    if (v < 0.0 || (u + v) > 1.0)
-        return false;
-
-    // At this stage we can compute t to find out where the intersection point is on the line.
-    float t = f * dot(edge2, q);
-    if (t <= EPSILON)   // this means that there is a line intersection but not a ray intersection.
-        return false;
-
-    return true;        // ray intersection
-}
-
-layout (location = 0) out vec4 color;
-in vec2 uv;
-        
-
-void main()
-{
-    vec2 uvN = 2.0 * uv - 1.0;
-    uvN = vec2(uvN.x, uvN.y * 480.0f / 640.0f);
-
-   
-
-    Camera cam; 
-    cam.pos =   vec3( 1,  0,  1);
-    cam.dir =   vec3( -.1,  0, -.5);
-    cam.right = vec3( 1,  0,  0);
-    cam.up =    cross(cam.right, cam.dir);
-
-    Ray r;
-    r.origin = cam.pos;
-    r.dir = normalize(vec3(uvN.xy, 1.0f));
-
-    
-    vec3 spherePos = vec3(0, 0, -6);
-    vec3 sphereLocal = WorldToCamera(cam, spherePos);
-    float sphereRadius = 1.5;
-
-    vec3 trianglePos = vec3(.8, 0, -2);
-    vec3 vertA = vec3(-0.1, -0.4, -0.5);
-    vec3 vertB = vec3( 0, 0.3, 0);
-    vec3 vertC = vec3( 0.1, -0.1, 0);
-
-    vec3 col = vec3(1.0, 1.0, 1.0);
-
-
-    float t = max( 
-        HitTriangle(WorldToCamera(cam, trianglePos), WorldToCamera(cam, vertA), WorldToCamera(cam, vertB), WorldToCamera(cam, vertC), r),
-        HitSphere(sphereLocal, sphereRadius, r));
-    if(t > 0.0f) // RayIntersectTri(trianglePos, vertA, vertB, vertC, r)
-    {
-        vec3 n = normalize(RaySolve(r, t) - sphereLocal);
-        color = vec4(abs(n), 1.0);
-    }
-    else
-    {
-        color = vec4(1.0, 1.0, 1.0, 1.0); 
-    }
-
-    //float t = HitSphere(sphereLocal, sphereRadius, r);
-    //if (t > 0.0)
-    //{
-    //    vec3 n = normalize(RaySolve(r, t) - sphereLocal);
-    //    color = vec4(n, 1.0);
-    //    //color = vec4( 0.5 * col * (n.x + 1, n.y + 1, n.z + 1), 1.0);
-    //}
-    //else
-    //{
-    //    color = vec4(1.0, 1.0, 1.0, 1.0); 
-    //}
-};
