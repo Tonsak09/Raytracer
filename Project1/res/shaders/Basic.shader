@@ -87,10 +87,19 @@ vec3 sun = vec3(-1, -1, 0);
         
 vec3 WorldToCamera(Camera cam, vec3 worldPos);
 vec3 RaySolve(Ray ray, float t);
+vec2 TilingAndOffset(vec2 uv, vec2 tiling, vec2 offset);
+vec3 TriplanarTex(
+    vec3 world, vec3 normal,
+    vec2 frontTiling,   vec2 frontOffset,
+    vec2 sideTiling,    vec2 sideOffset,
+    vec2 topTiling,     vec2 topOffset,
+    float sharpness);
 
 HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT], Camera cam, Ray r, HitData data, int bounceCounter, vec2 uv, bool shadowCheck);
 float HitSphere(vec3 center, float radius, Ray ray);
 float HitTriangle(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOffset, Ray ray);
+float Checkered(vec2 uv);
+float Checkered_3D(vec3 pos);
 
 
 
@@ -213,6 +222,7 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
             // If valid then generate normals and color 
             if(currCheckT > 0.0)
             {   
+                // Chooses the first sphere atm 
                 if (hasItem && currCheckT > t)
                     continue; 
 
@@ -234,11 +244,26 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
                     startDir = n;
                 }
                
-                
-                holdCol = vec3(1,1,1);
+
                 data.n = n;
 
+
+                // Sphere's basic color 
+                holdCol =   TriplanarTex(
+                    data.pos, data.n,
+                    vec2(1.0, 1.0),   vec2(0.0, 0.0),   // Front 
+                    vec2(1.0, 1.0),   vec2(0.0, 0.0),    // Side 
+                    vec2(1.0, 1.0),   vec2(0.0, 0.0),     // Top 
+                    999.0);
+                holdCol = vec3(1.0, 1.0, 1.0) * Checkered_3D(data.pos);
+
+
+
+                // Check for shadow 
+                
+
                 //r.pos = sphereLocal - (r.dir * sphere.radius);
+
 
 
                 type = SPHERE;
@@ -360,6 +385,7 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
     }
     else
     {
+        // Does not bounce to sky
         data.color = vec3(0,0,0);
     }
 
@@ -386,6 +412,40 @@ vec3 RaySolve(Ray ray, float t)
 {
     return ray.pos + t * ray.dir;
 } 
+
+vec2 TilingAndOffset(vec2 uv, vec2 tiling, vec2 offset)
+{
+    return uv * tiling + offset;
+}
+
+vec3 TriplanarTex(
+    vec3 world, vec3 normal,
+    vec2 frontTiling,   vec2 frontOffset,
+    vec2 sideTiling,    vec2 sideOffset,
+    vec2 topTiling,     vec2 topOffset,
+    float sharpness)
+{
+
+    vec2 frontUV = TilingAndOffset(world.xy, frontTiling, frontOffset);
+    vec2 sideUV = TilingAndOffset(world.zy, sideTiling, sideOffset);
+    vec2 topUV = TilingAndOffset(world.xz, topTiling, topOffset);
+
+    vec3 sharpNorm = vec3(pow(abs(normal.x), sharpness), pow(abs(normal.y), sharpness), pow(abs(normal.z), sharpness)); ; 
+    sharpNorm = sharpNorm / (sharpNorm.x + sharpNorm.y + sharpNorm.z);
+
+
+    frontUV *= sharpNorm.z;
+    sideUV *= sharpNorm.x;
+    topUV *= sharpNorm.y;
+
+    vec3 front = vec3(1.0, 0.0, 0.0) * sharpNorm.z; //Checkered(frontUV);
+    vec3 side =  vec3(0.0, 1.0, 0.0) * sharpNorm.x; //Checkered(sideUV);
+    vec3 top =   vec3(0.0, 0.0, 1.0) * sharpNorm.y; //Checkered(topUV);
+
+
+    // Sample targets based on UVs
+    return front + side + top;
+}
 
 float HitSphere(vec3 center, float radius, Ray ray)
 {
@@ -464,11 +524,28 @@ vec3 RayTrianglePos()
     return vec3(0,0,0);
 }
 
-//vec3 random_unit_vector() {
-//    while (true) {
-//        auto p = vec3::random(-1,1);
-//        auto lensq = p.length_squared();
-//        if (lensq <= 1)
-//            return p / sqrt(lensq);
-//    }
-//}
+float Checkered(vec2 uv)
+{
+    // add different dimensions
+    float chessboard = floor(uv.x) + floor(uv.y);
+    // divide it by 2 and get the fractional part, resulting in a value of 0 for even and 0.5 for odd numbers.
+    chessboard = fract(chessboard * 0.5);
+    // multiply it by 2 to make odd values white instead of grey
+    chessboard *= 2.0;
+    return chessboard;
+}
+
+float Checkered_3D(vec3 pos)
+{
+    float scale = 1.0;
+
+    //scale the position to adjust for shader input and floor the values so we have whole numbers
+    vec3 adjustedWorldPos = floor(pos / scale);
+    //add different dimensions
+    float chessboard = adjustedWorldPos.x + adjustedWorldPos.y + adjustedWorldPos.z;
+    //divide it by 2 and get the fractional part, resulting in a value of 0 for even and 0.5 for off numbers.
+    chessboard = fract(chessboard * 0.5);
+    //multiply it by 2 to make odd values white instead of grey
+    chessboard *= 2;
+    return chessboard;
+}
