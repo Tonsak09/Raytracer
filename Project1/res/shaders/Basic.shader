@@ -76,8 +76,8 @@ struct Sample
 layout (location = 0) out vec4 color;
 in vec2 uv;
 
-#define MAX_BOUNCE 3
-#define SPHERE_COUNT 3
+#define MAX_BOUNCE 4
+#define SPHERE_COUNT 2
 #define TRIANGLE_COUNT 2
 
 #define SPHERE 0
@@ -94,6 +94,8 @@ vec3 TriplanarTex(
     vec2 sideTiling,    vec2 sideOffset,
     vec2 topTiling,     vec2 topOffset,
     float sharpness);
+vec3 RayTrianglePos(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOffset, Ray ray, out bool valid);
+
 
 HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT], Camera cam, Ray r, HitData data, int bounceCounter, vec2 uv, bool shadowCheck);
 float HitSphere(vec3 center, float radius, Ray ray);
@@ -151,8 +153,8 @@ void main()
     Sphere spheres[SPHERE_COUNT] = Sphere[SPHERE_COUNT]
     (
         sphereA,
-        sphereB,
-        sphereC
+        sphereB
+        //sphereC
     );
     
     Triangle triangles[TRIANGLE_COUNT] = Triangle[TRIANGLE_COUNT]
@@ -171,16 +173,6 @@ void main()
     
 
 
-    //float t = -1.0f; 
-    //
-    //// Floor check 
-    //t = max(
-    //        HitTriangle(WorldToCamera(cam, triA.pos), WorldToCamera(cam, triA.vertA), WorldToCamera(cam, triA.vertB), WorldToCamera(cam, triA.vertC), r),
-    //        HitTriangle(WorldToCamera(cam, triB.pos), WorldToCamera(cam, triB.vertA), WorldToCamera(cam, triB.vertB), WorldToCamera(cam, triB.vertC), r));
-
-    // We can assume that the triangle's normal is (0, 1, 0) but
-    // only this specific case 
-
 
 };
 
@@ -194,15 +186,12 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
     data.color = vec3(1.0, 1.0, 1.0);
     int bounceCount = 1;
 
-    vec3 startPos;
-    vec3 startDir;
 
     bool hitSky = false; 
 
     for (int bounce = 0; bounce < MAX_BOUNCE; bounce++)
     {
         float t = -1.0; 
-        int type = -1;
 
         bool hasItem = false; 
 
@@ -220,101 +209,98 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
             float currCheckT = HitSphere(sphereLocal, sphere.radius, r);
 
             // If valid then generate normals and color 
-            if(currCheckT > 0.0)
+            if(currCheckT > t)
             {   
                 // Chooses the first sphere atm 
-                if (hasItem && currCheckT > t)
+                 if (hasItem && currCheckT > t)
                     continue; 
-
-                
-
-                
                 hasItem = true; 
 
                 t = currCheckT;
                 vec3 n = normalize(RaySolve(r, t) - sphereLocal);
                 
                 data.pos = RaySolve(r, t);
-                //holdCol = vec3(0.1, 0.8, 0);
-                
-                // Store first point of this cell 
-                if (!hasItem)
-                {
-                    startPos = data.pos;
-                    startDir = n;
-                }
-               
+                holdCol = vec3(0.1, 0.8, 0);
 
                 data.n = n;
 
 
                 // Sphere's basic color 
-                holdCol =   TriplanarTex(
-                    data.pos, data.n,
-                    vec2(1.0, 1.0),   vec2(0.0, 0.0),   // Front 
-                    vec2(1.0, 1.0),   vec2(0.0, 0.0),    // Side 
-                    vec2(1.0, 1.0),   vec2(0.0, 0.0),     // Top 
-                    999.0);
-                holdCol = vec3(1.0, 1.0, 1.0) * Checkered_3D(data.pos);
+                holdCol = vec3(0.8, 0.8, 0.8) * Checkered_3D(data.pos);
+            }
+        }
+        
+        for (int i = 0; i < triangles.length(); i++)
+        {
+            Triangle triangle = triangles[i];
+
+
+            //float currCheckT = 
+            //HitTriangle(
+            //    WorldToCamera(cam, triangle.pos), 
+            //    WorldToCamera(cam, triangle.vertA), 
+            //    WorldToCamera(cam, triangle.vertB), 
+            //    WorldToCamera(cam, triangle.vertC), 
+            //    r);
+
+            bool valid = true;
+            vec3 holdPos = RayTrianglePos(
+                    WorldToCamera(cam, triangle.pos), 
+                    WorldToCamera(cam, triangle.vertA), 
+                    WorldToCamera(cam, triangle.vertB), 
+                    WorldToCamera(cam, triangle.vertC),
+                   r, valid); 
+
+
+            //If valid then generate normals and color 
+            if(valid)
+            {   
+                //Chooses the first hit atm 
+                if (hasItem)
+                {
+                   continue; 
+                }
 
 
 
-                // Check for shadow 
+                t = 1.0; // TODO: Inverse solve 
+                vec3 n =  vec3(0, 1, 0);
                 
+                
+                // TODO: Current issue is that upon relfection it does not seem to connect with the sky 
 
-                //r.pos = sphereLocal - (r.dir * sphere.radius);
+                
+                //vec3 holdPos = data.pos;
+
+                data.pos = holdPos;
 
 
+                // if(valid)
+                // {
+                //     data.pos = holdPos;
+                // }
+                // else
+                // {
+                //     data.pos = holdPos;
+                //     holdCol = vec3(1.0, 1.0, 0.0);
+                //     continue;
+                // }
 
-                type = SPHERE;
+                //hasItem = true; 
 
-                // Bounce
-                //data = HitWorld(spheres, triangles, cam, r, 0);
+
+                data.n = n;
+                holdCol = vec3(0.8, 0.8, 0.8) * Checkered_3D(data.pos);
+
+                
             }
         }
 
-    
-
-        // Check world for best collision choice in triangles 
-        //for (int i = 0; i < triangles.length(); i++)
-        //{
-        //    Triangle triangle = triangles[i];
-        //
-        //    float currCheckT = 
-        //    HitTriangle(
-        //        WorldToCamera(cam, triangle.pos), 
-        //        WorldToCamera(cam, triangle.vertA), 
-        //        WorldToCamera(cam, triangle.vertB), 
-        //        WorldToCamera(cam, triangle.vertC), 
-        //        r);
-        //
-        //    if(currCheckT > t)
-        //    {
-        //        t = currCheckT;
-        //        vec3 n = vec3(0, 1, 0);
-        //
-        //        data.pos = RaySolve(r, t);
-        //        data.color *= vec3(1,0,0);
-        //        data.n = n;
-        //
-        //        type = TRIANGLE;
-        //    }
-        //
-        //
-        //
-        //    // Ray to triangle position 
-        //    // r.pos
-        //}
-
-
-        
-
-       
 
         // Skybox sample
         data.color += holdCol;
 
-        if (t <= 0.0)
+        if (t < 0.0)
         {
             //data.color *= 0; //vec3(0,0,0);
             //holdCol = vec3(0.1, 0.4, 0.6);
@@ -327,8 +313,8 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
             // Valid hit was made 
             bounceCount += 1;
 
-            r.pos = data.pos;
             r.dir = data.n;
+            r.pos = data.pos;
         }
 
     }
@@ -339,45 +325,7 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
     //       works for now 
 
 
-    //if(checkShadow == true)
-    //{
-    //        // Check if illuminated by direct light 
-    //    Ray shadowRay;
-    //    shadowRay.pos = startPos; //data.pos;
-    //    shadowRay.dir = sun;
-    //    //
-    //    HitData shadowData;
-    //    
-    //
-    //    bool hasHit = false; 
-    //    for (int i = 0; i < spheres.length(); i++)
-    //    {
-    //        
-    //        Sphere sphere = spheres[i];
-    //
-    //        vec3 sphereLocal = WorldToCamera(cam, sphere.pos);
-    //
-    //        float currCheckT = HitSphere(sphereLocal, sphere.radius, shadowRay);
-    //        
-    //
-    //        // Check if hit or light 
-    //        if(currCheckT > 0.0)
-    //        {   
-    //            data.color = vec3(0,0,0);
-    //
-    //            // Valid hit 
-    //            //hasHit = true;
-    //            //break;
-    //            //
-    //        }
-    //
-    //    }
-    //
-    //    if(hasHit)
-    //    {
-    //        //data.color = vec3(0,0,0);
-    //    }
-    //}
+ 
     
     if (hitSky)
     {
@@ -388,6 +336,10 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
         // Does not bounce to sky
         data.color = vec3(0,0,0);
     }
+
+    //data.color *= 1.0 / (bounceCount);
+
+
 
     return data;
 }
@@ -490,7 +442,7 @@ float HitTriangle(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOff
 
     if (det > -0.0001 && det < 0.001)
     {
-        return 0.0;
+        return -1.0;
     }
 
     float invDet = 1.0 / det;
@@ -499,7 +451,7 @@ float HitTriangle(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOff
     float u = dot(tVec, pVec) * invDet;
     if(u < 0.0 || u > 1.0)
     {
-        return 0.0;
+        return -1.0;
     }
 
     vec3 qVec = cross(tVec, edgeA);
@@ -507,7 +459,7 @@ float HitTriangle(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOff
     float v = dot(dir, qVec) * invDet;
     if(v < 0.0 || u + v > 1.0)
     {
-        return 0.0;
+        return -1.0;
     }
 
     t = dot(edgeB, qVec) * invDet;
@@ -519,10 +471,57 @@ vec3 RaySpherePos()
     return vec3(0,0,0);
 }
 
-vec3 RayTrianglePos()
+vec3 RayTrianglePos(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOffset, Ray ray, out bool valid)
 {
-    return vec3(0,0,0);
+    float epsilon = 0.1;
+
+    vec3 edge1 = vertBOffset - vertAOffset;
+    vec3 edge2 = vertCOffset - vertAOffset;
+    vec3 ray_cross_e2 = cross(ray.dir, edge2);
+    float det = dot(edge1, ray_cross_e2);
+
+    if (det > -epsilon && det < epsilon)
+    {
+        valid = false;
+        return vec3(0,0, -50000);    // This ray is parallel to this triangle.
+    }
+
+    float inv_det = 1.0 / det;
+    vec3 s = ray.pos - vertAOffset;
+    float u = inv_det * dot(s, ray_cross_e2);
+
+    if ((u < 0 && abs(u) > epsilon) || (u > 1 && abs(u-1) > epsilon))
+    {
+        valid = false; 
+        return vec3(0,0,-50000);
+    }
+
+    vec3 s_cross_e1 = cross(s, edge1);
+    float v = inv_det * dot(ray.dir, s_cross_e1);
+
+    if ((v < 0 && abs(v) > epsilon) || (u + v > 1 && abs(u + v - 1) > epsilon))
+    {
+        valid = false; 
+        return vec3(0,0,-50000);
+    }
+
+    // At this stage we can compute t to find out where the intersection point is on the line.
+    float t = inv_det * dot(edge2, s_cross_e1);
+
+    if (t > epsilon) // ray intersection
+    {
+        valid = true;
+        return  vec3(ray.pos + ray.dir * t);
+    }
+    else // This means that there is a line intersection but not a ray intersection.
+    {
+        valid = false; 
+        return vec3(0,0,-50000);
+    }
 }
+
+
+
 
 float Checkered(vec2 uv)
 {
@@ -537,7 +536,7 @@ float Checkered(vec2 uv)
 
 float Checkered_3D(vec3 pos)
 {
-    float scale = 1.0;
+    float scale = 0.5;
 
     //scale the position to adjust for shader input and floor the values so we have whole numbers
     vec3 adjustedWorldPos = floor(pos / scale);
@@ -549,3 +548,46 @@ float Checkered_3D(vec3 pos)
     chessboard *= 2;
     return chessboard;
 }
+
+
+
+
+       //if(checkShadow == true)
+    //{
+    //        // Check if illuminated by direct light 
+    //    Ray shadowRay;
+    //    shadowRay.pos = startPos; //data.pos;
+    //    shadowRay.dir = sun;
+    //    //
+    //    HitData shadowData;
+    //    
+    //
+    //    bool hasHit = false; 
+    //    for (int i = 0; i < spheres.length(); i++)
+    //    {
+    //        
+    //        Sphere sphere = spheres[i];
+    //
+    //        vec3 sphereLocal = WorldToCamera(cam, sphere.pos);
+    //
+    //        float currCheckT = HitSphere(sphereLocal, sphere.radius, shadowRay);
+    //        
+    //
+    //        // Check if hit or light 
+    //        if(currCheckT > 0.0)
+    //        {   
+    //            data.color = vec3(0,0,0);
+    //
+    //            // Valid hit 
+    //            //hasHit = true;
+    //            //break;
+    //            //
+    //        }
+    //
+    //    }
+    //
+    //    if(hasHit)
+    //    {
+    //        //data.color = vec3(0,0,0);
+    //    }
+    //}
