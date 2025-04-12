@@ -76,7 +76,7 @@ struct Sample
 layout (location = 0) out vec4 color;
 in vec2 uv;
 
-#define MAX_BOUNCE 4
+#define MAX_BOUNCE 5
 #define SPHERE_COUNT 2
 #define TRIANGLE_COUNT 2
 
@@ -95,6 +95,7 @@ vec3 TriplanarTex(
     vec2 topTiling,     vec2 topOffset,
     float sharpness);
 vec3 RayTrianglePos(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOffset, Ray ray, out bool valid);
+float RayPlane(vec3 center, vec3 N, Ray ray);
 
 
 HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT], Camera cam, Ray r, HitData data, int bounceCounter, vec2 uv, bool shadowCheck);
@@ -103,19 +104,24 @@ float HitTriangle(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOff
 float Checkered(vec2 uv);
 float Checkered_3D(vec3 pos);
 
-
+float Random (vec2 st);
+vec3 RandInUnitSphere();
+vec3 RandUnitVector();
+float DiffusePBR(vec3 normal, vec3 dirToLight);
+vec3 LamberScatter(Ray ray, vec3 n, out bool valid);
+bool NearZero(vec3 vec);
+vec3 RandInUnitSphere();
+vec3 RandUnitVector();
 
 void main()
 {
     vec2 uvN = 2.0 * uv - 1.0;
     uvN = vec2(uvN.x, -uvN.y * 480.0f / 640.0f);
 
-    
-
 
     Camera cam; 
     cam.pos =   vec3( 0, 0.3, -1);
-    cam.dir =   normalize(vec3( 0,  -0.1,  1));
+    cam.dir =   normalize(vec3( 0,  0,  1));
     cam.right = vec3( 1,  0,  0);
     cam.up =    cross(cam.right, cam.dir);
 
@@ -125,12 +131,12 @@ void main()
 
     
     Sphere sphereA; 
-    sphereA.pos =  vec3(0, -0.3, 4);
-    sphereA.radius = 1.5;
+    sphereA.pos =  vec3(0.1, -0.2, 0.01);
+    sphereA.radius = 0.2;
 
     Sphere sphereB; 
-    sphereB.pos =  vec3(2.0, .5, 6);
-    sphereB.radius = 1.5;
+    sphereB.pos =  vec3(0.3, -0.25, 0.05);
+    sphereB.radius = 0.2;
 
     Sphere sphereC; 
     sphereC.pos =  vec3(0.0, 1002.00, 0);
@@ -138,16 +144,16 @@ void main()
 
 
     Triangle triA;
-    triA.pos = vec3(0, 0, 0);
-    triA.vertA = vec3(-0.5, 0.0, -0.5);
-    triA.vertB = vec3(-0.5, 0.0,  0.5);
-    triA.vertC = vec3( 0.5, 0.0, -0.5);
+    triA.pos = vec3(0, 0.0, 0);
+    triA.vertA = vec3( 0.5, 0.0, -0.5);
+    triA.vertB = vec3( 0.5, 0.0,  0.5);
+    triA.vertC = vec3(-0.5, 0.0,  0.5);
 
     Triangle triB;
-    triB.pos = vec3(0, 0, 0);
-    triB.vertA = vec3( 0.5, 0.0, -0.5);
-    triB.vertB = vec3( 0.5, 0.0,  0.5);
-    triB.vertC = vec3(-0.5, 0.0,  0.5);
+    triB.pos = vec3(0, 0.0, 0);
+    triB.vertA = vec3(-0.5, 0.0, -0.5); 
+    triB.vertB = vec3(-0.5, 0.0,  0.5); 
+    triB.vertC = vec3( 0.5, 0.0, -0.5); 
 
 
     Sphere spheres[SPHERE_COUNT] = Sphere[SPHERE_COUNT]
@@ -183,7 +189,8 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
 
     //vec3 worldAmbient = vec3
 
-    data.color = vec3(1.0, 1.0, 1.0);
+    //data.color = mix(vec3(0.1, 0.4, 0.6), vec3(0.6, 0.1, 0.1), uv.y);
+    data.color = vec3(0.8, 0.8, 0.8);
     int bounceCount = 1;
 
 
@@ -196,8 +203,7 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
         bool hasItem = false; 
 
         //vec3 holdCol = mix(vec3(0.1, 0.4, 0.6), vec3(0.6, 0.4, 0.2), uv.y);
-        vec3 holdCol = mix(vec3(1, 0, 0), vec3(0, 1, 0), uv.y);
-
+        vec3 holdCol = data.color; //mix(vec3(1, 0, 0), vec3(0, 1, 0), uv.y);
 
         // Check world for best collision choice in spheres 
         for (int i = 0; i < spheres.length(); i++)
@@ -218,101 +224,79 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
 
                 t = currCheckT;
                 vec3 n = normalize(RaySolve(r, t) - sphereLocal);
+                // (Ray ray, vec3 n, out bool valid);
                 
-                data.pos = RaySolve(r, t);
-                holdCol = vec3(0.1, 0.8, 0);
+                bool isValidScatter = false; 
 
-                data.n = n;
+                data.pos = RaySolve(r, t);
+                data.n = LamberScatter(r, n, isValidScatter);
 
 
                 // Sphere's basic color 
-                holdCol = vec3(0.8, 0.8, 0.8) * Checkered_3D(data.pos);
+                holdCol *= n; //vec3(1.0, 1.0, 1.0)  * DiffusePBR(n, vec3(0, -1, 0));// * Checkered_3D(data.pos);
             }
         }
-        
+
         for (int i = 0; i < triangles.length(); i++)
         {
             Triangle triangle = triangles[i];
 
-
-            //float currCheckT = 
-            //HitTriangle(
-            //    WorldToCamera(cam, triangle.pos), 
-            //    WorldToCamera(cam, triangle.vertA), 
-            //    WorldToCamera(cam, triangle.vertB), 
-            //    WorldToCamera(cam, triangle.vertC), 
-            //    r);
-
-            bool valid = true;
-            vec3 holdPos = RayTrianglePos(
+            const vec3 n = vec3(0, 1, 0);
+            float currCheckT = RayPlane(
                     WorldToCamera(cam, triangle.pos), 
-                    WorldToCamera(cam, triangle.vertA), 
-                    WorldToCamera(cam, triangle.vertB), 
-                    WorldToCamera(cam, triangle.vertC),
-                   r, valid); 
+                    n, r);
+
+            bool valid = 0.0 <= 
+            HitTriangle(
+                WorldToCamera(cam, triangle.pos), 
+                WorldToCamera(cam, triangle.vertA), 
+                WorldToCamera(cam, triangle.vertB), 
+                WorldToCamera(cam, triangle.vertC), 
+                r);
 
 
-            //If valid then generate normals and color 
-            if(valid)
-            {   
-                //Chooses the first hit atm 
-                if (hasItem)
-                {
-                   continue; 
-                }
+            // Ensure triangle collision 
+            if(!valid)
+                continue;
 
+            // Make sure there is a succesful intersection 
+            if(currCheckT < 0.0)
+                continue;
 
+            // Only use if current is faster 
+            if (currCheckT > t && hasItem)
+                continue; 
+            
 
-                t = 1.0; // TODO: Inverse solve 
-                vec3 n =  vec3(0, 1, 0);
-                
-                
-                // TODO: Current issue is that upon relfection it does not seem to connect with the sky 
+            t = currCheckT; 
 
-                
-                //vec3 holdPos = data.pos;
+            bool isValidScatter = false; 
 
-                data.pos = holdPos;
+            data.pos = RaySolve(r, currCheckT) + vec3(0, 0.00001, 0);
+            data.n = LamberScatter(r, n, isValidScatter);
 
+            holdCol *= normalize(vec3(0.8, 0.8, 0.8) * Checkered_3D(data.pos));
 
-                // if(valid)
-                // {
-                //     data.pos = holdPos;
-                // }
-                // else
-                // {
-                //     data.pos = holdPos;
-                //     holdCol = vec3(1.0, 1.0, 0.0);
-                //     continue;
-                // }
-
-                //hasItem = true; 
-
-
-                data.n = n;
-                holdCol = vec3(0.8, 0.8, 0.8) * Checkered_3D(data.pos);
-
-                
-            }
+        
         }
+        
 
 
-        // Skybox sample
+
+        bounceCount += 1;
         data.color += holdCol;
+
 
         if (t < 0.0)
         {
-            //data.color *= 0; //vec3(0,0,0);
-            //holdCol = vec3(0.1, 0.4, 0.6);
-            bounceCount += 1;
-            hitSky = true; 
+            // Skybox sample
+            //holdCol *= vec3(0.1, 0.4, 0.6);
+            hitSky = true;
             break;
         }
         else
         {
             // Valid hit was made 
-            bounceCount += 1;
-
             r.dir = data.n;
             r.pos = data.pos;
         }
@@ -323,19 +307,36 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
     // NOTE: This system runs by choosing the first thing that gets hit
     //       in the arrays. This will need to change in the future but
     //       works for now 
-
-
- 
     
-    if (hitSky)
+
+    vec3 skyColor = mix(vec3(0.1, 0.4, 0.6), vec3(0.6, 0.1, 0.1), uv.y);
+
+    if(hitSky && bounceCount == 2)
     {
-        data.color *= 1.0 / (bounceCount);
+       data.color = skyColor;
+    }
+    else if (hitSky)
+    {
+        
+        data.color *= (1.0 / (bounceCount));
+        //data.color = vec3(1, 0, 0);
     }
     else
     {
-        // Does not bounce to sky
+        // Does not bounce to sky and counts as shadow 
         data.color = vec3(0,0,0);
     }
+
+
+    // if(hitSky)
+    // {
+    //     data.color= vec3(1, 0, 0);
+    // }
+    // else
+    // {
+    //     data.color = vec3(0, 0, 1);
+    // }
+
 
     //data.color *= 1.0 / (bounceCount);
 
@@ -354,7 +355,7 @@ vec3 WorldToCamera(Camera cam, vec3 worldPos)
     mat[1] = cam.up ;
     mat[2] = cam.dir;
 
-    return inverse(mat) * worldPos;
+    return  inverse(mat) * worldPos;
 
     //vec3 rel = worldPos - cam.pos;
     //return vec3(dot(worldPos, cam.right), dot(worldPos, cam.up), dot(worldPos, cam.dir));
@@ -521,6 +522,16 @@ vec3 RayTrianglePos(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCO
 }
 
 
+float RayPlane(vec3 center, vec3 N, Ray ray)
+{
+    float denom = dot(N, ray.dir);
+    if (abs(denom) < 1e-6) {
+        // Ray is parallel to the plane
+        return -1.0;
+    }
+    float t = dot(center - ray.pos, N) / denom;
+    return (t >= 0.0) ? t : -1.0; // Return -1.0 if the intersection is behind the ray
+}
 
 
 float Checkered(vec2 uv)
@@ -536,7 +547,7 @@ float Checkered(vec2 uv)
 
 float Checkered_3D(vec3 pos)
 {
-    float scale = 0.5;
+    float scale = 0.1;
 
     //scale the position to adjust for shader input and floor the values so we have whole numbers
     vec3 adjustedWorldPos = floor(pos / scale);
@@ -550,44 +561,84 @@ float Checkered_3D(vec3 pos)
 }
 
 
+float DiffusePBR(vec3 normal, vec3 dirToLight)
+{
+	return clamp(dot(normal, dirToLight), 0.0, 1.0);
+}
 
 
-       //if(checkShadow == true)
-    //{
-    //        // Check if illuminated by direct light 
-    //    Ray shadowRay;
-    //    shadowRay.pos = startPos; //data.pos;
-    //    shadowRay.dir = sun;
-    //    //
-    //    HitData shadowData;
-    //    
-    //
-    //    bool hasHit = false; 
-    //    for (int i = 0; i < spheres.length(); i++)
-    //    {
-    //        
-    //        Sphere sphere = spheres[i];
-    //
-    //        vec3 sphereLocal = WorldToCamera(cam, sphere.pos);
-    //
-    //        float currCheckT = HitSphere(sphereLocal, sphere.radius, shadowRay);
-    //        
-    //
-    //        // Check if hit or light 
-    //        if(currCheckT > 0.0)
-    //        {   
-    //            data.color = vec3(0,0,0);
-    //
-    //            // Valid hit 
-    //            //hasHit = true;
-    //            //break;
-    //            //
-    //        }
-    //
-    //    }
-    //
-    //    if(hasHit)
-    //    {
-    //        //data.color = vec3(0,0,0);
-    //    }
-    //}
+
+vec3 DirLight(vec3 lightDir, vec3 lightColor, float lightIntensity, vec3 camPos, vec3 pos, vec3 normal, float roughness, float metalness, vec3 albedo, vec3 specColor)
+{
+	vec3 V = normalize(camPos - pos);
+	
+
+	//float specExponent = (1.0f - roughness) * MAX_SPECULAR_EXPONENT;
+	vec3 R = reflect(normal, lightDir);
+
+    float d = clamp(dot(normal, lightDir), 0, 1);
+	vec3 diffuse = vec3(d, d, d);
+	vec3 F;
+	//vec3 spec = MicrofacetBRDF(normal, lightDir, V, roughness, specColor, F);
+
+	// Calculate diffuse with energy conservation, including cutting diffuse for metals
+	//vec3 balancedDiff = DiffuseEnergyConserve(diffuse, spec, metalness);
+	// Combine the final diffuse and specular values for this light
+	vec3 total = (albedo) * lightIntensity * lightColor;
+
+
+	return total;
+}
+
+
+vec3 LamberScatter(Ray ray, vec3 n, out bool valid)
+{
+    valid = false; 
+
+    vec3 randUnit = RandUnitVector();
+    vec3 scatteredDirection = n + randUnit;
+
+    if (NearZero(scatteredDirection))
+        scatteredDirection = n;
+
+    valid = true; 
+    return scatteredDirection;
+}
+
+// Noise function from The Book of Shaders 
+float Random (in vec2 st) 
+{
+    return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+}
+
+
+/// <summary>
+/// Gets a random vector 3 that exists within 
+/// a unit sphere 
+/// </summary>
+/// <returns></returns>
+vec3 RandInUnitSphere()
+{
+	while (true)
+	{
+		vec3 vec = vec3(Random(vec2(-1.0, 1.0)), Random(vec2(-1.0, 1.0)), Random(vec2(-1.0, 1.0)));
+		float squared = dot(vec, vec); // square the vector 
+
+		if (squared < 1.0f)
+			return vec;
+	}
+}
+
+/// <summary>
+/// Get a random normalized vector 
+/// </summary>
+/// <returns></returns>
+vec3 RandUnitVector()
+{
+	return normalize(RandInUnitSphere());
+}
+
+bool NearZero(vec3 vec)
+{
+    return (abs(vec.x) <= 0.0001) && (abs(vec.y) <= 0.0001) && (abs(vec.z) <= 0.0001);
+}
