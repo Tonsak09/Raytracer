@@ -76,7 +76,7 @@ struct Sample
 layout (location = 0) out vec4 color;
 in vec2 uv;
 
-#define MAX_BOUNCE 5
+#define MAX_BOUNCE 3
 #define SPHERE_COUNT 2
 #define TRIANGLE_COUNT 2
 
@@ -112,6 +112,8 @@ vec3 LamberScatter(Ray ray, vec3 n, out bool valid);
 bool NearZero(vec3 vec);
 vec3 RandInUnitSphere();
 vec3 RandUnitVector();
+vec3 DielectricScatter(Ray ray, vec3 n, bool frontFace, float ir, out bool valid);
+float DielectricReflectance(float cosine, float ref_idx);
 
 void main()
 {
@@ -205,6 +207,9 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
         //vec3 holdCol = mix(vec3(0.1, 0.4, 0.6), vec3(0.6, 0.4, 0.2), uv.y);
         vec3 holdCol = data.color; //mix(vec3(1, 0, 0), vec3(0, 1, 0), uv.y);
 
+        bool frontFace = true; 
+        float ir = 0.8;
+
         // Check world for best collision choice in spheres 
         for (int i = 0; i < spheres.length(); i++)
         {
@@ -229,14 +234,32 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
                 bool isValidScatter = false; 
 
                 data.pos = RaySolve(r, t);
-                data.n = LamberScatter(r, n, isValidScatter);
+
+                if (i == 1)
+                {
+                    data.n = LamberScatter(r, n, isValidScatter);
+                    holdCol *= DiffusePBR(n, vec3(0, 1, 0));
+
+                }
+                else
+                {
+                    vec3 temp = DielectricScatter(r, n, frontFace, ir, isValidScatter); //LamberScatter(r, n, isValidScatter);
+                    
+                    if (isValidScatter)
+                    {
+                        data.n = temp;
+                        frontFace = !frontFace; 
+                    }
+
+                    holdCol *= vec3(1.0, 1.0, 1.0);
+
+                }
 
 
                 // Sphere's basic color 
-                holdCol *= n; //vec3(1.0, 1.0, 1.0)  * DiffusePBR(n, vec3(0, -1, 0));// * Checkered_3D(data.pos);
+                //holdCol *= vec3(0.9, 0.9, 0.9); //vec3(1.0, 1.0, 1.0)  * DiffusePBR(n, vec3(0, -1, 0));// * Checkered_3D(data.pos);
             }
         }
-
         for (int i = 0; i < triangles.length(); i++)
         {
             Triangle triangle = triangles[i];
@@ -276,7 +299,6 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
             data.n = LamberScatter(r, n, isValidScatter);
 
             holdCol *= normalize(vec3(0.8, 0.8, 0.8) * Checkered_3D(data.pos));
-
         
         }
         
@@ -318,6 +340,8 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
     else if (hitSky)
     {
         
+        data.color += mix(vec3(0.1, 0.4, 0.6), vec3(0.6, 0.1, 0.1), data.n) * 0.9;
+        bounceCount += 1;
         data.color *= (1.0 / (bounceCount));
         //data.color = vec3(1, 0, 0);
     }
@@ -641,4 +665,91 @@ vec3 RandUnitVector()
 bool NearZero(vec3 vec)
 {
     return (abs(vec.x) <= 0.0001) && (abs(vec.y) <= 0.0001) && (abs(vec.z) <= 0.0001);
+}
+
+
+
+vec3 DielectricScatter(Ray ray, vec3 n, bool frontFace, float ir, out bool valid)
+{
+
+    // NOTE: Make sure to have a better sample after escaping the back side. It should
+    //       sample from the sky 
+
+    float dot = dot(ray.dir, n);
+
+	vec3 outwardNormal = dot < 0 ? -n : n;
+	float niOverNt = dot < 0 ? ir : 1 / ir;
+	float cosine = dot < 0 ? ir * dot / length(ray.dir) : -dot / length(ray.dir);
+
+	vec3 refracted = refract(ray.dir, outwardNormal, niOverNt);
+	float reflectProb = !NearZero(refracted) ? DielectricReflectance(cosine, ir) : 1;
+
+	//return Uniform(random) < reflectProb
+	//	? MaterialRay(Ray(record.Point, Reflect(ray.Direction, record.Normal)), Vec3(1))
+	//	: MaterialRay(Ray(record.Point, *refracted), Vec3(1));
+
+    valid = true; 
+    return refracted;
+    //return reflect(ray.dir, n);
+
+
+
+
+
+    //vec4 attenuation = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+    //float refraction_ratio = frontFace ? (1.0f / ir) : ir;
+    //
+    //vec3 dir = ray.dir;
+    //vec3 refract;
+    //vec3 direction;
+    //
+    //
+    //vec3 unit_direction = normalize(dir);
+    //refract = refract(unit_direction, n, refraction_ratio);
+    //
+    //float dot = dot(-unit_direction, n);
+    //
+    //float cos_theta = min(dot, 1.0);
+    //float sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+    //
+    //bool cannot_refract = refraction_ratio * sin_theta > 1.0;
+    //
+    //if (cannot_refract || DielectricReflectance(cos_theta, refraction_ratio) > Random(vec2(dir.x, dir.y)))
+    //{
+    //    direction = reflect(unit_direction, n);
+    //}
+    //else
+    //{
+    //    direction = refract(unit_direction, n, refraction_ratio);
+    //}
+    //
+    //
+    ////vec3 scattered = Ray(ray.pos, direction);
+    //return direction;
+}
+
+float DielectricReflectance(float cosine, float ref_idx)
+{
+    // Use Schlick's approximation for reflectance.
+    float r0 = (1.0f - ref_idx) / (1.0f + ref_idx);
+    r0 = r0 * r0;
+    return r0 + (1.0f - r0) * pow((1.0f - cosine), 5.0f);
+}
+
+
+// ********************************************** FIX THIS PLEASSSEEE
+
+bool Refract(const Vec3& v, const Vec3& normal, const float niOverNt, Vec3& refactedRay)
+{
+	vec3 uv = UnitVector(v);
+	float dt = Dot(uv, normal);
+	float discriminant = 1 - niOverNt * niOverNt * (1 - dt * dt);
+
+	if (discriminant <= 0)
+	{
+		return false;
+	}
+
+	refactedRay = niOverNt * (uv - normal * dt) - normal * sqrt(discriminant);
+	return true;
 }
