@@ -76,7 +76,7 @@ struct Sample
 layout (location = 0) out vec4 color;
 in vec2 uv;
 
-#define MAX_BOUNCE 3
+#define MAX_BOUNCE 5
 #define SPHERE_COUNT 2
 #define TRIANGLE_COUNT 2
 
@@ -99,7 +99,7 @@ float RayPlane(vec3 center, vec3 N, Ray ray);
 
 
 HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT], Camera cam, Ray r, HitData data, int bounceCounter, vec2 uv, bool shadowCheck);
-float HitSphere(vec3 center, float radius, Ray ray);
+float HitSphere(vec3 center, float radius, Ray ray, out bool valid);
 float HitTriangle(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOffset, Ray ray);
 float Checkered(vec2 uv);
 float Checkered_3D(vec3 pos);
@@ -114,6 +114,7 @@ vec3 RandInUnitSphere();
 vec3 RandUnitVector();
 vec3 DielectricScatter(Ray ray, vec3 n, bool frontFace, float ir, out bool valid);
 float DielectricReflectance(float cosine, float ref_idx);
+vec3 Refract(Ray ray, vec3 normal, float ir, out bool valid);
 
 void main()
 {
@@ -198,6 +199,7 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
 
     bool hitSky = false; 
 
+
     for (int bounce = 0; bounce < MAX_BOUNCE; bounce++)
     {
         float t = -1.0; 
@@ -208,19 +210,21 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
         vec3 holdCol = data.color; //mix(vec3(1, 0, 0), vec3(0, 1, 0), uv.y);
 
         bool frontFace = true; 
-        float ir = 0.8;
+        float ir = 1.5;
 
         // Check world for best collision choice in spheres 
-        for (int i = 0; i < spheres.length(); i++)
+        for (int i = 0; i < 1; i++)
         {
             Sphere sphere = spheres[i];
 
             vec3 sphereLocal = WorldToCamera(cam, sphere.pos);
 
-            float currCheckT = HitSphere(sphereLocal, sphere.radius, r);
+            bool validSphere = false; 
+            float currCheckT = HitSphere(sphereLocal, sphere.radius, r, validSphere);
 
             // If valid then generate normals and color 
-            if(currCheckT > t)
+            //if(currCheckT > t)
+            if(validSphere)
             {   
                 // Chooses the first sphere atm 
                  if (hasItem && currCheckT > t)
@@ -238,21 +242,35 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
                 if (i == 1)
                 {
                     data.n = LamberScatter(r, n, isValidScatter);
-                    holdCol *= DiffusePBR(n, vec3(0, 1, 0));
-
+                    holdCol = data.color * DiffusePBR(n, vec3(0, 1, 0));
                 }
                 else
                 {
                     vec3 temp = DielectricScatter(r, n, frontFace, ir, isValidScatter); //LamberScatter(r, n, isValidScatter);
+                    data.n = temp;
+                    holdCol = data.color;
+
+                    //if (isValidScatter)
+                    //{
+                    //    //holdCol *= vec3(1.0, 0.0, 0.0);
+                    //    data.n = temp;
+                    //
+                    //    frontFace = !frontFace;
+                    //}
+                    //else
+                    //{
+                    //    //holdCol *= vec3(0.0, 1.0, 0.0);
+                    //    data.n = n;
+                    //}
+
+                    //if (isValidScatter)
+                    //{
+                    //    data.n = temp;
+                    //    frontFace = !frontFace; 
+                    //    bounceCount -= 1;
+                    //}
                     
-                    if (isValidScatter)
-                    {
-                        data.n = temp;
-                        frontFace = !frontFace; 
-                    }
-
-                    holdCol *= vec3(1.0, 1.0, 1.0);
-
+                    //holdCol *= vec3(1.0, 1.0, 1.0);
                 }
 
 
@@ -298,7 +316,7 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
             data.pos = RaySolve(r, currCheckT) + vec3(0, 0.00001, 0);
             data.n = LamberScatter(r, n, isValidScatter);
 
-            holdCol *= normalize(vec3(0.8, 0.8, 0.8) * Checkered_3D(data.pos));
+            holdCol = data.color * normalize(vec3(0.8, 0.8, 0.8) * Checkered_3D(data.pos));
         
         }
         
@@ -349,6 +367,7 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
     {
         // Does not bounce to sky and counts as shadow 
         data.color = vec3(0,0,0);
+        //data.color *= (1.0 / (bounceCount));
     }
 
 
@@ -424,25 +443,65 @@ vec3 TriplanarTex(
     return front + side + top;
 }
 
-float HitSphere(vec3 center, float radius, Ray ray)
+float HitSphere(vec3 center, float radius, Ray ray, out bool valid)
 {
+    float tMin = -1000;
+    float tMax = 10000;
+
+
+    vec3 oc = ray.pos - center;
+	float a = dot(ray.dir, ray.dir);
+	float b = dot(oc, ray.dir);
+	float c = dot(oc, oc) - radius * radius;
+	float discriminant = b * b - a * c;
+
+	if (discriminant >= 0)
+	{
+		float t1 = (-b - sqrt(discriminant)) / a;
+		float t2 = (-b + sqrt(discriminant)) / a;
+
+		if ((tMin <= t1 && t1 < tMax) || (tMin <= t2 && t2 < tMax))
+		{
+			float t = (tMin <= t1 && t1 < tMax) ? t1 : t2;
+			vec3 point = RaySolve(ray, t);
+			vec3 normal = (point - center) / radius;
+
+            valid = true;
+
+			//hitRecord = NewHitRecord(t, point, normal, sphere.MaterialIndex);
+			return t;
+		}
+	}
+
+
+    valid = false;
+	return -1.0f;
+
+
+
+
+
+
+
+
+
     // Source: https://raytracing.github.io/books/RayTracingInOneWeekend.html  
 
-    vec3 oc = ray.pos - center; // Fixed direction
-    float a = dot(ray.dir, ray.dir);
-    float b = 2.0 * dot(ray.dir, oc);
-    float c = dot(oc, oc) - radius * radius;
-    float discriminant = b * b - 4.0 * a * c; 
-
-    if (discriminant < 0)
-    {
-        return -1.0;
-    }
-    else
-    {
-        //return 1.0;
-        return (-b - sqrt(discriminant)) / (2.0 * a); // Fixed quadratic formula
-    }
+    //vec3 oc = ray.pos - center; // Fixed direction
+    //float a = dot(ray.dir, ray.dir);
+    //float b = 2.0 * dot(ray.dir, oc);
+    //float c = dot(oc, oc) - radius * radius;
+    //float discriminant = b * b - 4.0 * a * c; 
+    //
+    //if (discriminant < 0)
+    //{
+    //    return -1.0;
+    //}
+    //else
+    //{
+    //    //return 1.0;
+    //    return (-b - sqrt(discriminant)) / (2.0 * a); // Fixed quadratic formula
+    //}
 }
 
 float HitTriangle(vec3 center, vec3 vertAOffset, vec3 vertBOffset, vec3 vertCOffset, Ray ray)
@@ -671,28 +730,68 @@ bool NearZero(vec3 vec)
 
 vec3 DielectricScatter(Ray ray, vec3 n, bool frontFace, float ir, out bool valid)
 {
+    bool front = dot(ray.dir, n) >= 0;
+    float ri = front ? (1.0/ir) : ir;
+
+    vec3 unit_direction = normalize(ray.dir);
+    bool isValid;
+    vec3 refracted = Refract(ray, n, ri, isValid);
+
+    return refracted;
+
+
+
+
+    //vec3 attenuation = vec3(1.0, 1.0, 1.0);
+    //bool front = dot(ray.dir, n) >= 0;
+    //float ri = front ? (1.0/ir) : ir;
+    //
+    //vec3 unit_direction = normalize(ray.dir);
+    //float cos_theta = min(dot(-unit_direction, n), 1.0);
+    //float sin_theta = sqrt(1.0 - cos_theta*cos_theta);
+    //
+    //bool cannot_refract = ri * sin_theta > 1.0;
+    //vec3 direction;
+    //
+    //if (cannot_refract || DielectricReflectance(cos_theta, ri) > 0.1f)
+    //    direction = reflect(unit_direction, n);
+    //else
+    //    direction = refract(unit_direction, n, ri);
+    //
+    ////scattered = ray(rec.p, direction);
+    ////return true;
+    //valid = true; 
+    //return direction;
+
+
+
+
+
+
+
 
     // NOTE: Make sure to have a better sample after escaping the back side. It should
     //       sample from the sky 
 
+    /*
     float dot = dot(ray.dir, n);
 
 	vec3 outwardNormal = dot < 0 ? -n : n;
 	float niOverNt = dot < 0 ? ir : 1 / ir;
 	float cosine = dot < 0 ? ir * dot / length(ray.dir) : -dot / length(ray.dir);
 
-	vec3 refracted = refract(ray.dir, outwardNormal, niOverNt);
+	//vec3 refracted = refract(ray.dir, outwardNormal, niOverNt);
+	vec3 refracted = Refract(ray, n, ir, valid);
 	float reflectProb = !NearZero(refracted) ? DielectricReflectance(cosine, ir) : 1;
+
 
 	//return Uniform(random) < reflectProb
 	//	? MaterialRay(Ray(record.Point, Reflect(ray.Direction, record.Normal)), Vec3(1))
 	//	: MaterialRay(Ray(record.Point, *refracted), Vec3(1));
 
-    valid = true; 
-    return refracted;
-    //return reflect(ray.dir, n);
-
-
+    //return refracted;
+    return reflect(ray.dir, n);
+    */
 
 
 
@@ -737,19 +836,21 @@ float DielectricReflectance(float cosine, float ref_idx)
 }
 
 
-// ********************************************** FIX THIS PLEASSSEEE
-
-bool Refract(const Vec3& v, const Vec3& normal, const float niOverNt, Vec3& refactedRay)
+vec3 Refract(Ray ray, vec3 normal, float ir, out bool valid)
 {
-	vec3 uv = UnitVector(v);
-	float dt = Dot(uv, normal);
-	float discriminant = 1 - niOverNt * niOverNt * (1 - dt * dt);
+    vec3 refractedRay;
+
+	vec3 uv = normalize(ray.dir);
+	float dt = dot(ray.dir, normal);
+	float discriminant = 1 - ir * ir * (1 - dt * dt);
 
 	if (discriminant <= 0)
 	{
-		return false;
+        valid = false;
+		return vec3(0, 0, 0);
 	}
 
-	refactedRay = niOverNt * (uv - normal * dt) - normal * sqrt(discriminant);
-	return true;
+    valid = true;
+	refractedRay = ir * (uv - normal * dt) - normal * sqrt(discriminant);
+	return refractedRay;
 }
