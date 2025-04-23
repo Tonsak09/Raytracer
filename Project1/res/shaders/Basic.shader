@@ -76,7 +76,7 @@ struct Sample
 layout (location = 0) out vec4 color;
 in vec2 uv;
 
-#define MAX_BOUNCE 5
+#define MAX_BOUNCE 4
 #define SPHERE_COUNT 2
 #define TRIANGLE_COUNT 2
 
@@ -136,8 +136,8 @@ void main()
 
     
     Sphere sphereA; 
-    //sphereA.pos =  vec3(0.1, -0.2,  0.01);
-    sphereA.pos =  vec3(0.1, -0.2,  -0.2);
+    sphereA.pos =  vec3(0.1, -0.2,  0.01);
+    sphereA.pos =  vec3(0.0, -0.2, -0.2);
     sphereA.radius = 0.2;
 
     Sphere sphereB; 
@@ -254,14 +254,13 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
                 else
                 {
                     vec3 temp = DielectricScatter(r, n, ir, isValidScatter); 
-                    data.n = n;
-                    //data.pos += temp * 0.00001;
+                    data.n = temp;
+                    //data.pos += temp * sphere.radius;
 
                     // Jump ray to outside of sphere 
 
                     //holdCol = temp;
                     holdCol = vec3(0.0, 0.0, 0.0);
-
 
                     // if(temp.x < 0 || temp.y < 0 || temp.z < 0)
                     // {
@@ -272,15 +271,14 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
                     //     holdCol = vec3(0, 1, 0);
                     // }
                     
-                    data.pos = GetSphereExitPoint(r.pos, temp, sphereLocal, sphere.radius);
-                    data.pos += -n * 0.0001;
-                    data.n = -n;
+                    
+
 
                     if (isValidScatter) //(temp.x < 0 || temp.y < 0 || temp.z < 0)
                     {
-                        //holdCol = vec3(1, 0, 0);
-
-                        dialectric = true;
+                        data.pos = GetSphereExitPoint(r.pos, temp, sphereLocal, sphere.radius) ;
+                        data.pos += -n * 0.0001;
+                        dialectric = true; 
                     }
                     else
                     {
@@ -366,7 +364,7 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
 
     vec3 skyColor = mix(vec3(0.1, 0.4, 0.6), vec3(0.6, 0.1, 0.1), uv.y);
 
-    if (hitSky)
+   if (hitSky)
     {
         data.color += mix(vec3(0.1, 0.4, 0.6), vec3(0.6, 0.1, 0.1), r.dir.y) * 0.9;
         bounceCount += 1;
@@ -734,7 +732,7 @@ vec3 DielectricScatter(Ray ray, vec3 n, float ir, out bool valid)
     vec3 direction;
     bool holdValue;
     
-    if (cannot_refract || DielectricReflectance(cos_theta, ri) > 0.1)
+    if (cannot_refract || DielectricReflectance(cos_theta, ri) > 0.1f)
     {
         direction = reflect(unit_direction, n);
         valid = false; 
