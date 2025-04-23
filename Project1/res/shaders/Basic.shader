@@ -76,7 +76,7 @@ struct Sample
 layout (location = 0) out vec4 color;
 in vec2 uv;
 
-#define MAX_BOUNCE 4
+#define MAX_BOUNCE 8
 #define SPHERE_COUNT 2
 #define TRIANGLE_COUNT 2
 
@@ -137,7 +137,7 @@ void main()
     
     Sphere sphereA; 
     sphereA.pos =  vec3(0.1, -0.2,  0.01);
-    sphereA.pos =  vec3(0.0, -0.2, -0.2);
+    sphereA.pos =  vec3(-0.1, -0.2, -0.2);
     sphereA.radius = 0.2;
 
     Sphere sphereB; 
@@ -254,7 +254,7 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
                 else
                 {
                     vec3 temp = DielectricScatter(r, n, ir, isValidScatter); 
-                    data.n = temp;
+                    data.n = n;
                     //data.pos += temp * sphere.radius;
 
                     // Jump ray to outside of sphere 
@@ -277,11 +277,13 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
                     if (isValidScatter) //(temp.x < 0 || temp.y < 0 || temp.z < 0)
                     {
                         data.pos = GetSphereExitPoint(r.pos, temp, sphereLocal, sphere.radius) ;
-                        data.pos += -n * 0.0001;
+                        data.pos += -temp * 0.0001;
+                        data.n = -n;
                         dialectric = true; 
                     }
                     else
                     {
+                        data.n = n;
                         dialectric = false;
                     }
                 }
@@ -732,7 +734,7 @@ vec3 DielectricScatter(Ray ray, vec3 n, float ir, out bool valid)
     vec3 direction;
     bool holdValue;
     
-    if (cannot_refract || DielectricReflectance(cos_theta, ri) > 0.1f)
+    if (cannot_refract || DielectricReflectance(cos_theta, ri) > 0.1)
     {
         direction = reflect(unit_direction, n);
         valid = false; 
