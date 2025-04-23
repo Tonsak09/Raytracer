@@ -76,7 +76,7 @@ struct Sample
 layout (location = 0) out vec4 color;
 in vec2 uv;
 
-#define MAX_BOUNCE 8
+#define MAX_BOUNCE 5
 #define SPHERE_COUNT 2
 #define TRIANGLE_COUNT 2
 
@@ -277,7 +277,7 @@ HitData HitWorld(Sphere spheres[SPHERE_COUNT], Triangle triangles[TRIANGLE_COUNT
                     if (isValidScatter) //(temp.x < 0 || temp.y < 0 || temp.z < 0)
                     {
                         data.pos = GetSphereExitPoint(r.pos, temp, sphereLocal, sphere.radius) ;
-                        data.pos += -temp * 0.0001;
+                        data.pos += -temp * 0.00001;
                         data.n = -n;
                         dialectric = true; 
                     }
