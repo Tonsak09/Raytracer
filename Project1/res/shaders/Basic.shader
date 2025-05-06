@@ -76,12 +76,17 @@ struct Sample
 layout (location = 0) out vec4 color;
 in vec2 uv;
 
+uniform float u_avgLuminance; 
+
 #define MAX_BOUNCE 5
 #define SPHERE_COUNT 2
 #define TRIANGLE_COUNT 2
 
 #define SPHERE 0
 #define TRIANGLE 1
+
+#define PERCEPTUAL 0
+#define PHOTOGRAPHIC 1
 
 vec3 sun = vec3(-1, -1, 0);
         
@@ -117,6 +122,9 @@ float DielectricReflectance(float cosine, float ref_idx);
 vec3 Refract(Ray ray, vec3 normal, float ir, out bool valid);
 vec3 Refract(Ray ray, vec3 normal, float etai_over_etat, out bool valid);
 vec3 GetSphereExitPoint(vec3 p, vec3 d, vec3 center, float radius);
+
+float WardTR(float luminance, float logLuminance);
+float ReinhardTon(float luminance, float keyValue);
 
 void main()
 {
@@ -180,6 +188,40 @@ void main()
     HitData data;
     data.color = vec3(0.1, 0.1, 0.1);
     data = HitWorld(spheres, triangles, cam, r, data, MAX_BOUNCE, uvN, true);
+    
+    // Quick and dirty pixel illumination 
+    float luminance = 0.27 * data.color.r + 0.67 * data.color.g + 0.06 * data.color.b;
+    luminance *= 1.0f;
+
+    // Compute tone reproduction  
+    if(u_avgLuminance >= 0.0)
+    {
+        float ldMax = 5.0;
+        int width = 640 * 2;
+        int height = 480 * 2;
+        
+        
+        float logLuminance = exp(log(0.0001 + u_avgLuminance) );
+        float tr = 0.0f; 
+        
+        int whichTR = PERCEPTUAL;
+        switch(whichTR)
+        {
+            case PERCEPTUAL:
+                tr = WardTR(luminance, logLuminance) * 0.2f;
+                break;
+            case PHOTOGRAPHIC:
+                tr = ReinhardTon(luminance, 0.5);
+                break; 
+        }
+        
+        data.color = data.color * tr / ldMax;
+    }
+    else
+    {
+        data.color = vec3(luminance, luminance, luminance);
+    }
+    
 
     color = vec4(data.color, 1.0); 
 };
@@ -799,4 +841,22 @@ vec3 GetSphereExitPoint(vec3 p, vec3 d, vec3 center, float radius)
     float tExit = (t1 > 0.0001) ? t1 : t2; // ignore the zero or near-zero root (the starting point)
 
     return p + tExit * d;
+}
+
+float WardTR(float luminance, float logLuminance)
+{
+    float ldMax = 10.0;
+    float sf = ((1.219 + pow(ldMax / 2.0f, 0.4) ) / (1.219 + pow(logLuminance, 0.4)), 2.5);
+
+    return sf;
+}
+
+float ReinhardTon(float luminance, float keyValue)
+{
+    float ldMax = 10.0;
+    float a = 0.18f;
+    float scaleLuminance = (a / keyValue) * luminance;
+    float reflectance = scaleLuminance / (1.0 + scaleLuminance);
+
+    return reflectance * ldMax; 
 }

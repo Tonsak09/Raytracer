@@ -6,6 +6,8 @@
 #include <string>
 #include <sstream>
 
+#include "TextureCapture.h"
+
 struct ShaderProgramSource
 {
     std::string VertexSource;
@@ -90,6 +92,8 @@ static unsigned int CreateShader(const std::string& vertexShader, const std::str
     return program;
 }
 
+void SetFloatToShader(GLuint shaderProgram, const std::string& uniformName, float value);
+
 const int width = 640 * 2;
 const int height = 480 * 2;
 
@@ -112,7 +116,7 @@ int main(void)
 
     /* Make the window's context current */
     glfwMakeContextCurrent(window);
-
+    
 
     // Must be done after the context is created  
     if (glewInit() != GLEW_OK)
@@ -155,7 +159,35 @@ int main(void)
         /* Render here */
         glClear(GL_COLOR_BUFFER_BIT);
 
+        // Draw scene initial 
+        SetFloatToShader(shader, "u_avgLuminance", -1.0f);
         glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        // Capture scene 
+        glActiveTexture(GL_TEXTURE0);
+        TextureCapture capture(width, height);
+        unsigned char* textureCapture = capture.CaptureFramebuffer(width, height);
+
+        // Compute average luminance 
+        //const float maxLuminance = 100000.0f; 
+        float totalLuminance = 0.0f; 
+        for (uint32_t p = 0; p < width * height * 4; p += 4)
+        {
+            float readValue = static_cast<float>(textureCapture[p]) / 255.0f;
+            float luminance = readValue;// *maxLuminance;
+
+            totalLuminance += luminance;
+        }
+
+        float avgLuminance = totalLuminance / (width * height);
+        printf("%f\n", avgLuminance);
+
+
+        // Draw with average luminance 
+        SetFloatToShader(shader, "u_avgLuminance", avgLuminance);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        delete[] textureCapture;
 
         /* Swap front and back buffers */
         glfwSwapBuffers(window);
@@ -168,4 +200,19 @@ int main(void)
 
     glfwTerminate();
     return 0;
+}
+
+
+void SetFloatToShader(GLuint shaderProgram, const std::string& uniformName, float value)
+{
+    GLint location = glGetUniformLocation(shaderProgram, uniformName.c_str());
+    if (location != -1)
+    {
+        glUseProgram(shaderProgram);
+        glUniform1f(location, value);
+    }
+    else
+    {
+        std::cerr << "Warning: uniform '" << uniformName << "' not found in shader.\n";
+    }
 }
