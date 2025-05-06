@@ -180,7 +180,6 @@ int main(void)
         }
 
         float avgLuminance = totalLuminance / (width * height);
-        printf("%f\n", avgLuminance);
 
 
         // Draw with average luminance 

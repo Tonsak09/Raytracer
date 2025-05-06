@@ -115,8 +115,6 @@ vec3 RandUnitVector();
 float DiffusePBR(vec3 normal, vec3 dirToLight);
 vec3 LamberScatter(Ray ray, vec3 n, out bool valid);
 bool NearZero(vec3 vec);
-vec3 RandInUnitSphere();
-vec3 RandUnitVector();
 vec3 DielectricScatter(Ray ray, vec3 n, float ir, out bool valid);
 float DielectricReflectance(float cosine, float ref_idx);
 vec3 Refract(Ray ray, vec3 normal, float ir, out bool valid);
@@ -759,8 +757,6 @@ bool NearZero(vec3 vec)
 {
     return (abs(vec.x) <= 0.0001) && (abs(vec.y) <= 0.0001) && (abs(vec.z) <= 0.0001);
 }
-
-
 
 vec3 DielectricScatter(Ray ray, vec3 n, float ir, out bool valid)
 {
